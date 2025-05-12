@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: white;
+        }
+        .header {
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .file-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-input input[type="file"] {
+            display: none;
+        }
+        .file-input label {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .file-input label:hover {
+            background-color: #45a049;
+        }
+        .viewer-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+        .image-container {
+            flex: 1;
+            position: relative;
+            background-color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .image-container img {
+            max-width: 100%;
+            max-height: 100%;
+            transition: transform 0.3s;
+        }
+        .controls {
+            display: flex;
+            gap: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .control-group h3 {
+            margin: 0;
+            font-size: 14px;
+            color: #333;
+            white-space: nowrap;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider-container label {
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+        }
+        .slider-container input[type="range"] {
+            width: 100px;
+        }
+        .slider-value {
+            font-size: 12px;
+            color: #666;
+            min-width: 50px;
+        }
+        .navigation {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .navigation button {
+            padding: 6px 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .navigation button:hover {
+            background-color: #45a049;
+        }
+        .navigation button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .slice-info {
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+        }
+        .metadata {
+            display: flex;
+            gap: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            font-size: 12px;
+        }
+        .metadata-item {
+            color: #666;
+        }
+        .metadata-item span {
+            color: #333;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            padding: 10px;
+            background-color: #f8d7da;
+            border-radius: 4px;
+            display: none;
+            margin: 10px;
+        }
+        .progress-container {
+            margin: 10px;
+            display: none;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #666;
+        }
+        .reset-button {
+            padding: 6px 12px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 12px;
+        }
+        .reset-button:hover {
+            background-color: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin: 0; font-size: 20px;">DICOM Viewer</h1>
+            <div class="file-input">
+                <input type="file" id="folderInput" webkitdirectory directory multiple>
+                <label for="folderInput">Choose DICOM Folder</label>
+            </div>
+        </div>
+        <div class="error" id="error"></div>
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress" id="progressBar"></div>
+            </div>
+            <div class="progress-text" id="progressText">Processing files...</div>
+        </div>
+        <div class="viewer-container">
+            <div class="controls">
+                <div class="control-group">
+                    <h3>Window/Level</h3>
+                    <div class="slider-container">
+                        <label>Width</label>
+                        <input type="range" id="windowWidth" min="1" max="4096" value="256">
+                        <div class="slider-value">Value: <span id="windowWidthValue">256</span></div>
+                    </div>
+                    <div class="slider-container">
+                        <label>Center</label>
+                        <input type="range" id="windowCenter" min="-1024" max="1024" value="127">
+                        <div class="slider-value">Value: <span id="windowCenterValue">127</span></div>
+                    </div>
+                    <button class="reset-button" id="resetWindowLevel">Reset</button>
+                </div>
+                <div class="control-group">
+                    <h3>Zoom</h3>
+                    <div class="slider-container">
+                        <label>Scale</label>
+                        <input type="range" id="zoom" min="50" max="200" value="100">
+                        <div class="slider-value">Value: <span id="zoomValue">100</span>%</div>
+                    </div>
+                    <button class="reset-button" id="resetZoom">Reset</button>
+                </div>
+                <div class="control-group">
+                    <h3>Navigation</h3>
+                    <div class="navigation">
+                        <button id="prevSlice" disabled>Previous</button>
+                        <div class="slice-info" id="sliceInfo">Slice: 0/0</div>
+                        <button id="nextSlice" disabled>Next</button>
+                    </div>
+                </div>
+            </div>
+            <div class="metadata">
+                <div class="metadata-item">Patient Name: <span id="patientName">-</span></div>
+                <div class="metadata-item">Patient ID: <span id="patientId">-</span></div>
+                <div class="metadata-item">Study Date: <span id="studyDate">-</span></div>
+                <div class="metadata-item">Modality: <span id="modality">-</span></div>
+                <div class="metadata-item">Series: <span id="seriesDescription">-</span></div>
+            </div>
+            <div class="image-container" id="imageContainer">
+                <img id="dicomImage" style="display: none;">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentImage = null;
+        let currentIndex = 0;
+        let isScrolling = false;
+        let scrollTimeout = null;
+        let defaultWindowWidth = 256;
+        let defaultWindowCenter = 127;
+        let defaultZoom = 100;
+        let dicomWorker = null;
+        let currentFiles = [];
+        let currentZoom = 100;
+
+        // Инициализация Web Worker
+        function initWorker() {
+            if (!dicomWorker) {
+                dicomWorker = new Worker('static/dicom-worker.js');
+                dicomWorker.onmessage = function(e) {
+                    if (e.data.error) {
+                        showError(e.data.error);
+                        return;
+                    }
+                    
+                    updateImage(e.data.image);
+                    updateMetadata(e.data.metadata);
+                    hideError();
+                };
+            }
+        }
+
+        // Обработчики элементов управления
+        document.getElementById('folderInput').addEventListener('change', handleFolderSelect);
+        document.getElementById('windowWidth').addEventListener('input', updateWindowLevel);
+        document.getElementById('windowCenter').addEventListener('input', updateWindowLevel);
+        document.getElementById('zoom').addEventListener('input', updateZoom);
+        document.getElementById('prevSlice').addEventListener('click', () => navigateSlice(-1));
+        document.getElementById('nextSlice').addEventListener('click', () => navigateSlice(1));
+        document.getElementById('resetWindowLevel').addEventListener('click', resetWindowLevel);
+        document.getElementById('resetZoom').addEventListener('click', resetZoom);
+
+        function handleFolderSelect(event) {
+            const files = Array.from(event.target.files).filter(file => 
+                file.name.toLowerCase().endsWith('.dcm')
+            );
+            
+            if (files.length === 0) {
+                showError('No DICOM files selected');
+                return;
+            }
+
+            // Показываем индикатор прогресса
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.textContent = 'Processing files...';
+            
+            // Сохраняем файлы
+            currentFiles = files;
+            currentIndex = 0;
+            
+            // Обрабатываем файлы с отображением прогресса
+            let processedFiles = 0;
+            const totalFiles = files.length;
+            
+            function updateProgress() {
+                const progress = (processedFiles / totalFiles) * 100;
+                progressBar.style.width = `${progress}%`;
+                progressText.textContent = `Processing files... ${Math.round(progress)}%`;
+                
+                if (processedFiles === totalFiles) {
+                    // Скрываем индикатор прогресса через небольшую задержку
+                    setTimeout(() => {
+                        progressContainer.style.display = 'none';
+                    }, 1000);
+                }
+            }
+            
+            // Обрабатываем первый файл
+            processFile(files[0]).then(() => {
+                processedFiles++;
+                updateProgress();
+                
+                // Обрабатываем остальные файлы в фоне
+                for (let i = 1; i < files.length; i++) {
+                    const reader = new FileReader();
+                    reader.onload = function() {
+                        processedFiles++;
+                        updateProgress();
+                    };
+                    reader.readAsArrayBuffer(files[i]);
+                }
+            });
+            
+            // Обновляем навигацию
+            updateNavigation();
+        }
+
+        function processFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            return fetch('/process_file', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(`Server returned ${response.status}: ${text}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Сохраняем путь к файлу для последующих запросов
+                if (typeof file === 'string') {
+                    currentFiles[currentIndex] = file;
+                } else {
+                    currentFiles[currentIndex] = file.path || file;
+                }
+                
+                updateImage(data.image);
+                updateMetadata(data.metadata);
+                hideError();
+            })
+            .catch(error => {
+                console.error('Error processing file:', error);
+                showError('Error processing file: ' + error.message);
+            });
+        }
+
+        function updateWindowLevel() {
+            if (!currentFiles.length) return;
+
+            const windowWidth = parseInt(document.getElementById('windowWidth').value);
+            const windowCenter = parseInt(document.getElementById('windowCenter').value);
+            
+            document.getElementById('windowWidthValue').textContent = windowWidth;
+            document.getElementById('windowCenterValue').textContent = windowCenter;
+
+            // Отправляем запрос на сервер для обновления изображения
+            fetch('/adjust', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filePath: currentFiles[currentIndex].path || currentFiles[currentIndex],
+                    windowWidth: windowWidth,
+                    windowCenter: windowCenter
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                updateImage(data.image);
+            })
+            .catch(error => {
+                console.error('Error adjusting image:', error);
+                showError('Error adjusting image: ' + error.message);
+            });
+        }
+
+        function updateZoom() {
+            const zoom = document.getElementById('zoom').value;
+            document.getElementById('zoomValue').textContent = zoom;
+            const img = document.getElementById('dicomImage');
+            img.style.transform = `scale(${zoom / 100})`;
+        }
+
+        function updateImage(base64Image) {
+            const img = document.getElementById('dicomImage');
+            if (!base64Image) {
+                console.error('No image data received');
+                return;
+            }
+            console.log('Updating image with base64 data:', base64Image.substring(0, 50) + '...');
+            img.src = 'data:image/png;base64,' + base64Image;
+            img.style.display = 'block';
+        }
+
+        function updateMetadata(metadata) {
+            console.log('Updating metadata:', metadata);
+            if (!metadata) {
+                console.error('No metadata received');
+                return;
+            }
+            
+            document.getElementById('patientName').textContent = metadata.PatientName || '-';
+            document.getElementById('patientId').textContent = metadata.PatientID || '-';
+            document.getElementById('studyDate').textContent = metadata.StudyDate || '-';
+            document.getElementById('modality').textContent = metadata.Modality || '-';
+            document.getElementById('seriesDescription').textContent = metadata.SeriesDescription || '-';
+            
+            // Обновляем значения слайдеров
+            const windowWidth = metadata.WindowWidth || 256;
+            const windowCenter = metadata.WindowCenter || 127;
+            
+            document.getElementById('windowWidth').value = windowWidth;
+            document.getElementById('windowCenter').value = windowCenter;
+            document.getElementById('windowWidthValue').textContent = Math.round(windowWidth);
+            document.getElementById('windowCenterValue').textContent = Math.round(windowCenter);
+            
+            // Сохраняем значения по умолчанию
+            defaultWindowWidth = windowWidth;
+            defaultWindowCenter = windowCenter;
+        }
+
+        function updateNavigation() {
+            const prevButton = document.getElementById('prevSlice');
+            const nextButton = document.getElementById('nextSlice');
+            const sliceInfo = document.getElementById('sliceInfo');
+            
+            prevButton.disabled = currentIndex <= 0;
+            nextButton.disabled = currentIndex >= currentFiles.length - 1;
+            sliceInfo.textContent = `Slice: ${currentIndex + 1}/${currentFiles.length}`;
+        }
+
+        function navigateSlice(direction) {
+            const newIndex = currentIndex + direction;
+            if (newIndex >= 0 && newIndex < currentFiles.length) {
+                currentIndex = newIndex;
+                updateNavigation();
+                processFile(currentFiles[currentIndex]);
+            }
+        }
+
+        function resetWindowLevel() {
+            if (!currentFiles.length) return;
+            
+            document.getElementById('windowWidth').value = defaultWindowWidth;
+            document.getElementById('windowCenter').value = defaultWindowCenter;
+            document.getElementById('windowWidthValue').textContent = defaultWindowWidth;
+            document.getElementById('windowCenterValue').textContent = defaultWindowCenter;
+            
+            processFile(currentFiles[currentIndex]);
+        }
+
+        function resetZoom() {
+            document.getElementById('zoom').value = defaultZoom;
+            document.getElementById('zoomValue').textContent = defaultZoom;
+            updateZoom();
+        }
+
+        function showError(message) {
+            const error = document.getElementById('error');
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        // Добавляем обработку колесика мыши
+        document.getElementById('imageContainer').addEventListener('wheel', (event) => {
+            if (!currentFiles.length) return;
+            
+            // Предотвращаем стандартную прокрутку страницы
+            event.preventDefault();
+            
+            // Защита от слишком быстрой прокрутки
+            if (isScrolling) return;
+            isScrolling = true;
+            
+            // Определяем направление прокрутки
+            const direction = event.deltaY > 0 ? 1 : -1;
+            navigateSlice(direction);
+            
+            // Сбрасываем флаг через небольшую задержку
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                isScrolling = false;
+            }, 100);
+        });
+
+        // Добавляем обработку клавиш для навигации
+        document.addEventListener('keydown', (event) => {
+            if (!currentFiles.length) return;
+            
+            if (event.key === 'ArrowLeft') {
+                navigateSlice(-1);
+            } else if (event.key === 'ArrowRight') {
+                navigateSlice(1);
+            }
+        });
+
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', function() {
+            if (dicomWorker) {
+                dicomWorker.terminate();
+            }
+        });
+
+        function calculateInitialZoom(imageWidth, imageHeight) {
+            const container = document.querySelector('.image-container');
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            
+            // Рассчитываем масштаб, чтобы изображение вписалось в контейнер
+            const scaleX = containerWidth / imageWidth;
+            const scaleY = containerHeight / imageHeight;
+            
+            // Используем меньший масштаб, чтобы изображение полностью поместилось
+            return Math.min(scaleX, scaleY);
+        }
+
+        function updateImageDisplay(base64Image, metadata) {
+            const img = document.getElementById('dicomImage');
+            img.src = 'data:image/png;base64,' + base64Image;
+            
+            // Обновляем значения window/level
+            document.getElementById('windowWidth').value = metadata.WindowWidth;
+            document.getElementById('windowCenter').value = metadata.WindowCenter;
+            document.getElementById('windowWidthValue').textContent = metadata.WindowWidth.toFixed(0);
+            document.getElementById('windowCenterValue').textContent = metadata.WindowCenter.toFixed(0);
+            
+            // Устанавливаем начальный зум
+            const initialZoom = calculateInitialZoom(metadata.ImageWidth, metadata.ImageHeight);
+            currentZoom = initialZoom;
+            updateZoom();
+            
+            // Обновляем метаданные
+            updateMetadata(metadata);
+        }
+
+        // Обработчик изменения размера окна
+        window.addEventListener('resize', () => {
+            const img = document.getElementById('dicomImage');
+            if (img.src && currentMetadata) {
+                const newZoom = calculateInitialZoom(currentMetadata.ImageWidth, currentMetadata.ImageHeight);
+                currentZoom = newZoom;
+                updateZoom();
+            }
+        });
+    </script>
+</body>
+</html> 
